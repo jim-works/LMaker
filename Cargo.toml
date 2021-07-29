@@ -1,5 +1,5 @@
 [package]
-name = "jcg"
+name = "lmaker"
 version = "0.1.0"
 authors = ["Jim <jim4m80@gmail.com>"]
 edition = "2018"
