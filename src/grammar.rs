@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Eq, PartialEq, Hash, Copy, Clone)]
 pub enum Symbol {
@@ -10,7 +10,7 @@ pub enum Symbol {
 
 pub enum FirstSet<'a> {
     Other(Symbol),
-    Nonterminal(&'a [Symbol]),
+    Nonterminal(&'a HashSet<Symbol>),
 }
 
 pub struct CFGProduction {
@@ -25,9 +25,9 @@ pub struct CFG<'a> {
     pub terminal_symbols: Vec<&'a str>,
 }
 
-fn set_has_nonterm(sets: &[HashMap<Symbol, Symbol>]) -> bool {
+fn set_has_nonterm(sets: &Vec<HashSet<Symbol>>) -> bool {
     for set in sets {
-        for symbol in set.keys() {
+        for symbol in set {
             match symbol {
                 Symbol::Nonterminal(_) => return true,
                 _ => (),
@@ -41,7 +41,7 @@ impl CFG<'_> {
     //generate the first set for each nonterminal in a CFG.
     //example: if A-> b|c|De and D->d|<empty>, first(A)={b,c,d,e}
     //return- first vec is indexed by nonterminal id, second vec contains list of terminals in the first set
-    pub fn generate_firsts(&self) -> Vec<Vec<Symbol>> {
+    pub fn generate_firsts(&self) -> Vec<HashSet<Symbol>> {
         let mut firsts = Vec::new();
         //prepopulate list
         for nt in 0..self.nonterminal_symbols.len() {
@@ -52,12 +52,12 @@ impl CFG<'_> {
         loop {
             iter += 1;
             for nonterminal in 0..self.nonterminal_symbols.len() {
-                let (to_add, to_remove) = self.generate_first_nonterm(nonterminal, &mut firsts);
+                let (to_add, to_remove) = self.generate_first_nonterm(nonterminal, &firsts);
                 for item in to_remove {
                     firsts[nonterminal].remove(&item);
                 }
                 for item in to_add {
-                    firsts[nonterminal].insert(item, item);
+                    firsts[nonterminal].insert(item);
                 }
             }
             if !set_has_nonterm(&firsts) || iter > 100 {
@@ -66,12 +66,7 @@ impl CFG<'_> {
             }
         }
         //transform firsts into desired structure
-        let mut ret = Vec::new();
-        for first in firsts {
-            let first_list = first.keys().map(|&x| x).collect();
-            ret.push(first_list);
-        }
-        ret
+        firsts
     }
     //generates the first set for a specific nonterminal from it's productions
     //this is the set of possible first terminals for a derviation of the nonterminal
@@ -79,17 +74,17 @@ impl CFG<'_> {
     fn generate_first_from_prods(
         &self,
         nonterminal: usize,
-        mut firsts: Vec<HashMap<Symbol, Symbol>>,
-    ) -> Vec<HashMap<Symbol, Symbol>> {
-        let mut my_firsts = HashMap::new();
+        mut firsts: Vec<HashSet<Symbol>>,
+    ) -> Vec<HashSet<Symbol>> {
+        let mut my_firsts = HashSet::new();
         for prod in &self.productions[nonterminal] {
             for symbol in &prod.rhs {
                 match symbol {
                     Symbol::Empty() => {
-                        my_firsts.insert(*symbol, *symbol);
+                        my_firsts.insert(*symbol);
                     }
                     _ => {
-                        my_firsts.insert(*symbol, *symbol);
+                        my_firsts.insert(*symbol);
                         break;
                     }
                 }
@@ -102,21 +97,21 @@ impl CFG<'_> {
     fn generate_first_nonterm(
         &self,
         nonterminal: usize,
-        firsts: &Vec<HashMap<Symbol, Symbol>>,
+        firsts: &Vec<HashSet<Symbol>>,
     ) -> (Vec<Symbol>, Vec<Symbol>) {
         let mut to_add = Vec::new();
         let mut to_remove = Vec::new();
-        for symbol in firsts[nonterminal].keys() {
+        for symbol in &firsts[nonterminal] {
             match symbol {
                 Symbol::Nonterminal(x) => {
                     to_remove.push(*symbol);
                     if *x != nonterminal {
                         //don't want to add my first set to itself
-                        for other_item in firsts[*x].keys() {
+                        for other_item in &firsts[*x] {
                             match other_item {
                                 Symbol::Empty() => {
                                     //if the other nonterminal conatins the empty string, we need to add our own first set to it
-                                    for my_item in firsts[nonterminal].keys() {
+                                    for my_item in &firsts[nonterminal] {
                                         to_add.push(*my_item);
                                     }
                                 }
@@ -138,7 +133,7 @@ impl CFG<'_> {
     pub fn get_first<'a>(
         &self,
         string: &[Symbol],
-        firsts: &'a [Vec<Symbol>],
+        firsts: &'a Vec<HashSet<Symbol>>,
     ) -> Option<FirstSet<'a>> {
         match string.first() {
             Some(symbol) => match symbol {
@@ -148,6 +143,99 @@ impl CFG<'_> {
             },
             None => Option::None,
         }
+    }
+
+    //generate the follow set for each nonterminal in a CFG.
+    //example: if A-> b|c|De and D->d|<empty>, follow(D)={e,d}
+    //return- first vec is indexed by nonterminal id, second vec contains list of terminals in the first set
+    pub fn generate_follows(&self, firsts: &Vec<HashSet<Symbol>>) -> Vec<HashSet<Symbol>> {
+        let mut follows = Vec::new();
+        //populate follow sets
+        for _ in 0..self.nonterminal_symbols.len() {
+            follows.push(HashSet::new());
+        }
+        //1. first rule is always S' -> S <eof>, so follow(S') = <eof>
+        follows[0].insert(Symbol::EOF());
+        let mut keep_going = true;
+        while keep_going {
+            keep_going = false;
+            //repeat these steps until no follow set grows
+            //2. for each production A-> (stuff1)X(stuff2) ...
+            //if <empty> is in first(stuff2), add [first(stuff2) union follow(A)] - <empty> to follow (x)
+            //otherwise, add first(stuff2) to follow(X)
+            for lhs in &self.productions {
+                for production in lhs {
+                    for index in 0..production.rhs.len() {
+                        let symbol = production.rhs[index];
+                        match symbol {
+                            Symbol::Nonterminal(x) => {
+                                let ret = self
+                                    .add_follow_nonterminal(follows, firsts, production, x, index);
+                                follows = ret.1;
+                                if ret.0 {
+                                    keep_going = true;
+                                }
+                            }
+                            _ => (),
+                        }
+                    }
+                }
+            }
+        }
+        follows
+    }
+
+    //returns (bool: was anything added?, updated follow sets)
+    fn add_follow_nonterminal(
+        &self,
+        follows: Vec<HashSet<Symbol>>,
+        firsts: &Vec<HashSet<Symbol>>,
+        production: &CFGProduction,
+        nonterm_id: usize,
+        symbol_index: usize,
+    ) -> (bool, Vec<HashSet<Symbol>>) {
+        let mut added = false;
+        let mut follow_set = HashSet::new();
+        for symbol in &follows[nonterm_id] {
+            follow_set.insert(symbol);
+        }
+        let beta_first = self.get_first(
+            &production.rhs[(symbol_index + 1)..production.rhs.len()],
+            firsts,
+        );
+        let mut has_empty = false;
+        match beta_first {
+            Some(FirstSet::Nonterminal(set)) => {
+                for symbol in set {
+                    match symbol {
+                        Symbol::Empty() => {
+                            has_empty = true;
+                        }
+                        _ => {
+                            if follow_set.insert(symbol) {
+                                added = true;
+                            }
+                        }
+                    }
+                }
+            }
+            _ => (),
+        }
+        if has_empty && production.nonterminal != nonterm_id {
+            //have to add follow(LHS) to follow(symbol)
+            for symbol in &follows[production.nonterminal] {
+                match symbol {
+                    Symbol::Empty() => (),
+                    _ => {
+                        if follow_set.insert(symbol) {
+                            added = true;
+                        }
+                    }
+                }
+            }
+        }
+        //
+        (added, follows)
     }
 
     //start state is first item in strings
