@@ -220,16 +220,13 @@ impl CFG<'_> {
         for mut rhs in rh_sides {
             for elem in rhs.iter {
                 let symbol: Symbol = match elem.chars().next() {
-                    Some('.') if elem.len() == 1 => Symbol::Empty(),
+                    Some('<') if elem == "<eof>" => Symbol::EOF(),
+                    Some('<') if elem == "<empty>" => Symbol::Empty(),
                     Some('.') => {
-                        let n = CFG::register(
-                            &elem[1..elem.len()], //remove . from start of terminal
-                            &mut t_last,
-                            &mut t_map,
-                        );
+                        let n = CFG::register(&elem, &mut t_last, &mut t_map);
                         if n == t_last {
                             //register in terminal symbol table
-                            t_symbols.push(&elem[1..elem.len()]);
+                            t_symbols.push(elem);
                         }
                         Symbol::Terminal(n - 1) //n is one higher than the corresponding string
                     }
@@ -253,15 +250,19 @@ impl CFG<'_> {
             for production in lhs_symbol.iter() {
                 print!("{} ->", self.nonterminal_symbols[production.nonterminal]);
                 for symbol in production.rhs.iter() {
-                    match symbol {
-                        Symbol::Terminal(x) => print!(" .{}", self.terminal_symbols[*x]),
-                        Symbol::Nonterminal(x) => print!(" {}", self.nonterminal_symbols[*x]),
-                        Symbol::Empty() => print!(" .<empty>"),
-                        Symbol::EOF() => print!(" .<eof>"),
-                    }
+                    print!(" {}", self.symbol_str(symbol));
                 }
                 println!();
             }
+        }
+    }
+    //returns a reference to the symbol's string
+    pub fn symbol_str(&self, symbol: &Symbol) -> &str {
+        match symbol {
+            Symbol::Terminal(x) => self.terminal_symbols[*x],
+            Symbol::Nonterminal(x) => self.nonterminal_symbols[*x],
+            Symbol::Empty() => "<empty>",
+            Symbol::EOF() => "<eof>",
         }
     }
 }
