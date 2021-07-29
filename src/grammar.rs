@@ -157,7 +157,8 @@ impl CFG<'_> {
         //1. first rule is always S' -> S <eof>, so follow(S') = <eof>
         follows[0].insert(Symbol::EOF());
         let mut keep_going = true;
-        while keep_going {
+        let mut iter = 0;
+        while keep_going && iter < 100 {
             keep_going = false;
             //repeat these steps until no follow set grows
             //2. for each production A-> (stuff1)X(stuff2) ...
@@ -181,6 +182,7 @@ impl CFG<'_> {
                     }
                 }
             }
+            iter += 1;
         }
         follows
     }
@@ -188,17 +190,13 @@ impl CFG<'_> {
     //returns (bool: was anything added?, updated follow sets)
     fn add_follow_nonterminal(
         &self,
-        follows: Vec<HashSet<Symbol>>,
+        mut follows: Vec<HashSet<Symbol>>,
         firsts: &Vec<HashSet<Symbol>>,
         production: &CFGProduction,
         nonterm_id: usize,
         symbol_index: usize,
     ) -> (bool, Vec<HashSet<Symbol>>) {
         let mut added = false;
-        let mut follow_set = HashSet::new();
-        for symbol in &follows[nonterm_id] {
-            follow_set.insert(symbol);
-        }
         let beta_first = self.get_first(
             &production.rhs[(symbol_index + 1)..production.rhs.len()],
             firsts,
@@ -212,7 +210,7 @@ impl CFG<'_> {
                             has_empty = true;
                         }
                         _ => {
-                            if follow_set.insert(symbol) {
+                            if follows[nonterm_id].insert(*symbol) {
                                 added = true;
                             }
                         }
@@ -221,19 +219,33 @@ impl CFG<'_> {
             }
             _ => (),
         }
+
         if has_empty && production.nonterminal != nonterm_id {
+            //brazy borrow checker stuff
+            let prod: &mut std::collections::HashSet<Symbol>;
+            let mine: &mut std::collections::HashSet<Symbol>;
+            if production.nonterminal > nonterm_id {
+                let tmp = follows.split_at_mut(production.nonterminal);
+                prod = &mut tmp.1[0];
+                mine = &mut tmp.0[nonterm_id];
+            } else {
+                let tmp = follows.split_at_mut(nonterm_id);
+                prod = &mut tmp.0[production.nonterminal];
+                mine = &mut tmp.1[0];
+            }
             //have to add follow(LHS) to follow(symbol)
-            for symbol in &follows[production.nonterminal] {
+            for symbol in prod.iter() {
                 match symbol {
                     Symbol::Empty() => (),
                     _ => {
-                        if follow_set.insert(symbol) {
+                        if mine.insert(*symbol) {
                             added = true;
                         }
                     }
                 }
             }
         }
+        //added
         //
         (added, follows)
     }
