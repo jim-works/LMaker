@@ -3,7 +3,6 @@ mod lr1_generator;
 mod parse_table;
 
 //TODO: FIX EMPTIES
-//      fix follows lol
 
 fn main() {
     let gstr = vec!["S -> C C", "C -> .e C", "C -> .d"];

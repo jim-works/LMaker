@@ -184,6 +184,7 @@ impl CFG<'_> {
             }
             iter += 1;
         }
+        println!("iter={}", iter);
         follows
     }
 
@@ -201,13 +202,13 @@ impl CFG<'_> {
             &production.rhs[(symbol_index + 1)..production.rhs.len()],
             firsts,
         );
-        let mut has_empty = false;
+        let mut add_lhs = false;
         match beta_first {
             Some(FirstSet::Nonterminal(set)) => {
                 for symbol in set {
                     match symbol {
                         Symbol::Empty() => {
-                            has_empty = true;
+                            add_lhs = true;
                         }
                         _ => {
                             if follows[nonterm_id].insert(*symbol) {
@@ -217,10 +218,18 @@ impl CFG<'_> {
                     }
                 }
             }
-            _ => (),
+            Some(FirstSet::Other(symbol)) => match symbol {
+                Symbol::Empty() => (),
+                _ => {
+                    if follows[nonterm_id].insert(symbol) {
+                        added = true;
+                    }
+                }
+            },
+            None => add_lhs = true,
         }
 
-        if has_empty && production.nonterminal != nonterm_id {
+        if add_lhs && production.nonterminal != nonterm_id {
             //brazy borrow checker stuff
             let prod: &mut std::collections::HashSet<Symbol>;
             let mine: &mut std::collections::HashSet<Symbol>;
