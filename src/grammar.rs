@@ -358,12 +358,16 @@ impl CFG<'_> {
     pub fn print(&self) {
         for lhs_symbol in self.productions.iter() {
             for production in lhs_symbol.iter() {
-                print!("{} ->", self.nonterminal_symbols[production.nonterminal]);
-                for symbol in production.rhs.iter() {
-                    print!(" {}", self.symbol_str(symbol));
-                }
+                self.print_production(production);
                 println!();
             }
+        }
+    }
+    //prints to stdout
+    pub fn print_production(&self, production: &CFGProduction) {
+        print!("{} ->", self.nonterminal_symbols[production.nonterminal]);
+        for symbol in production.rhs.iter() {
+            print!(" {}", self.symbol_str(symbol));
         }
     }
     //returns a reference to the symbol's string

@@ -7,12 +7,12 @@ mod test;
 
 fn main() {
     let gstr = vec![
-        "E -> E .+ T",
-        "E -> T",
-        "T -> T .* F",
-        "T -> F",
-        "F -> .( E .)",
-        "F -> .id",
+        "S -> S .; A",
+        "S -> A",
+        "A -> E",
+        "A -> .id .:= E",
+        "E -> E .+ .id",
+        "E -> .id",
     ];
     let grammar_strings: Vec<String> = gstr.iter().map(|&x| String::from(x)).collect();
     let cfg = grammar::CFG::from_strings(&grammar_strings);

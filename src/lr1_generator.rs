@@ -16,10 +16,9 @@ struct ItemSet<'a: 'b, 'b> {
     cfg: &'a grammar::CFG<'a>,
 }
 
-pub fn generate(cfg: &grammar::CFG) /*-> Box<parse_table::Table>*/
+pub fn generate(cfg: &grammar::CFG) /*-> parse_table::Table*/
 {
     let firsts = cfg.generate_firsts();
-    let follows = cfg.generate_follows(&firsts);
     let mut start_set = ItemSet {
         set: HashSet::new(),
         cfg: &cfg,
@@ -30,11 +29,18 @@ pub fn generate(cfg: &grammar::CFG) /*-> Box<parse_table::Table>*/
         lookahead: grammar::Symbol::EOF(),
     };
     start_set.set.insert(start_item);
-    closure(&mut start_set, &firsts);
+    start_set = closure(start_set, &firsts);
     //other stuff
+    for item in start_set.set {
+        cfg.print_production(item.production);
+        print!(" , {}\n", cfg.symbol_str(&item.lookahead));
+    }
 }
 
-fn closure(itemset: &mut ItemSet, firsts: &Vec<HashSet<grammar::Symbol>>) {
+fn closure<'a: 'b, 'b: 'c, 'c>(
+    mut itemset: ItemSet<'b, 'c>,
+    firsts: &'a Vec<HashSet<grammar::Symbol>>,
+) -> ItemSet<'b, 'c> {
     let mut add_buf;
     let mut keep_going = true;
     while keep_going {
@@ -49,14 +55,15 @@ fn closure(itemset: &mut ItemSet, firsts: &Vec<HashSet<grammar::Symbol>>) {
             }
         }
     }
+    itemset
 }
 
 //adds items to dest
-fn closure_item<'a: 'b, 'b>(
+fn closure_item<'a: 'b, 'b: 'c, 'c>(
     cfg: &'a grammar::CFG,
     firsts: &'b Vec<HashSet<grammar::Symbol>>,
-    item: &'b Item,
-    dest: &'b mut HashSet<Item<'b>>,
+    item: &'c Item,
+    dest: &'c mut HashSet<Item<'b>>,
 ) {
     let nt;
     match item.production.rhs[item.reading] {
@@ -66,7 +73,7 @@ fn closure_item<'a: 'b, 'b>(
     let prods = &cfg.productions[nt];
     let beta = &item.production.rhs[item.reading + 1..item.production.rhs.len()];
     let lookahead_option = cfg.get_first(beta, firsts);
-    let mut lookaheads;
+    let lookaheads;
     match lookahead_option {
         Some(x) => lookaheads = x,
         None => lookaheads = grammar::FirstSet::Other(item.lookahead),

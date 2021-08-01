@@ -14,13 +14,12 @@ fn get_gstr() -> Vec<String> {
 }
 
 #[allow(dead_code)]
-fn get_cfg(grammar_strings: &Vec<String>) -> Box<grammar::CFG> {
-    //let grammar_strings: Vec<String> = gstr.iter().map(|&x| String::from(x)).collect();
-    Box::new(grammar::CFG::from_strings(&grammar_strings))
+fn get_cfg(grammar_strings: &Vec<String>) -> grammar::CFG {
+    grammar::CFG::from_strings(&grammar_strings)
 }
 
 #[test]
-fn test_first() {
+fn first() {
     let firsts = get_cfg(&get_gstr()).generate_firsts();
 
     let first_s = &firsts[0];
@@ -47,7 +46,7 @@ fn test_first() {
     assert!(first_f.contains(&grammar::Symbol::Terminal(4)));
 }
 #[test]
-fn test_follow() {
+fn follow() {
     let gstr = &get_gstr();
     let cfg = get_cfg(gstr);
     let firsts = cfg.generate_firsts();
