@@ -13,6 +13,7 @@ pub enum FirstSet<'a> {
     Nonterminal(&'a HashSet<Symbol>),
 }
 
+#[derive(Eq, PartialEq, Hash)]
 pub struct CFGProduction {
     pub nonterminal: usize,
     pub rhs: Vec<Symbol>,

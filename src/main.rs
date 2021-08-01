@@ -36,4 +36,6 @@ fn main() {
         }
         println!();
     }
+
+    lr1_generator::generate(&cfg);
 }

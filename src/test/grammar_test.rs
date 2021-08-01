@@ -1,5 +1,6 @@
 use super::super::*;
 
+#[allow(dead_code)]
 fn get_gstr() -> Vec<String> {
     let gstr = vec![
         "E -> E .+ T",
@@ -11,6 +12,8 @@ fn get_gstr() -> Vec<String> {
     ];
     gstr.iter().map(|&x| String::from(x)).collect()
 }
+
+#[allow(dead_code)]
 fn get_cfg(grammar_strings: &Vec<String>) -> Box<grammar::CFG> {
     //let grammar_strings: Vec<String> = gstr.iter().map(|&x| String::from(x)).collect();
     Box::new(grammar::CFG::from_strings(&grammar_strings))
@@ -30,7 +33,18 @@ fn test_first() {
     assert_eq!(2, first_t.len());
     assert_eq!(2, first_f.len());
 
-    //assert!(first_s.contains(grammar::Symbol::Terminal()))
+    //.( and .id
+    assert!(first_s.contains(&grammar::Symbol::Terminal(2)));
+    assert!(first_s.contains(&grammar::Symbol::Terminal(4)));
+
+    assert!(first_e.contains(&grammar::Symbol::Terminal(2)));
+    assert!(first_e.contains(&grammar::Symbol::Terminal(4)));
+
+    assert!(first_t.contains(&grammar::Symbol::Terminal(2)));
+    assert!(first_t.contains(&grammar::Symbol::Terminal(4)));
+
+    assert!(first_f.contains(&grammar::Symbol::Terminal(2)));
+    assert!(first_f.contains(&grammar::Symbol::Terminal(4)));
 }
 #[test]
 fn test_follow() {
@@ -48,4 +62,23 @@ fn test_follow() {
     assert_eq!(3, follow_e.len());
     assert_eq!(4, follow_t.len());
     assert_eq!(4, follow_f.len());
+
+    assert!(follow_s.contains(&grammar::Symbol::EOF()));
+
+    //eof and .+ and .)
+    assert!(follow_e.contains(&grammar::Symbol::EOF()));
+    assert!(follow_e.contains(&grammar::Symbol::Terminal(0)));
+    assert!(follow_e.contains(&grammar::Symbol::Terminal(3)));
+
+    //eof and .+, .*, and .)
+    assert!(follow_t.contains(&grammar::Symbol::EOF()));
+    assert!(follow_t.contains(&grammar::Symbol::Terminal(0)));
+    assert!(follow_t.contains(&grammar::Symbol::Terminal(1)));
+    assert!(follow_t.contains(&grammar::Symbol::Terminal(3)));
+
+    //eof and .+, .*, and .)
+    assert!(follow_f.contains(&grammar::Symbol::EOF()));
+    assert!(follow_f.contains(&grammar::Symbol::Terminal(0)));
+    assert!(follow_f.contains(&grammar::Symbol::Terminal(1)));
+    assert!(follow_f.contains(&grammar::Symbol::Terminal(3)));
 }
