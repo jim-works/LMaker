@@ -1,3 +1,5 @@
+//runtimes for these algorithms (specifically insering a new state into the DFA) could definintely be improved
+
 use super::grammar;
 use super::parse_table;
 use std::collections::HashMap;
@@ -10,44 +12,163 @@ struct Item<'a> {
     lookahead: grammar::Symbol,
 }
 
-struct ItemSet<'a: 'b, 'b> {
+struct ItemSet<'a> {
     //key is next symbol to read for that item
-    set: HashSet<Item<'b>>,
-    cfg: &'a grammar::CFG<'a>,
+    set: HashSet<Item<'a>>,
 }
 
-pub fn generate(cfg: &grammar::CFG) /*-> parse_table::Table*/
-{
+struct DFAState<'a> {
+    id: usize,
+    itemset: ItemSet<'a>,
+    transitions: Vec<(grammar::Symbol, usize)>,
+}
+
+struct DFA<'a> {
+    states: Vec<DFAState<'a>>,
+}
+
+impl ItemSet<'_> {
+    pub fn print(&self, cfg: &grammar::CFG) {
+        for item in &self.set {
+            cfg.print_production(item.production);
+            print!(" , {}\n", cfg.symbol_str(&item.lookahead));
+        }
+    }
+}
+
+//resource for algorithm: http://www.orcca.on.ca/~watt/home/courses/2007-08/cs447a/notes/LR1%20Parsing%20Tables%20Example.pdf
+pub fn generate<'a>(
+    cfg: &'a grammar::CFG,
+) -> Result<parse_table::Table<'a>, parse_table::TableErr> {
     let firsts = cfg.generate_firsts();
+    let dfa = generate_dfa(cfg, &firsts);
+    let mut table = parse_table::Table {
+        rows: Vec::with_capacity(dfa.states.len()),
+        cfg: cfg,
+    };
+    for state in dfa.states {
+        match generate_table_row(&state) {
+            Ok(r) => table.rows.push(r),
+            Err(e) => return Result::Err(e),
+        };
+    }
+    Result::Ok(table)
+}
+
+fn generate_table_row(state: &DFAState) -> Result<parse_table::TableRow, parse_table::TableErr> {
+    let mut cells = HashMap::new();
+
+    for transition in &state.transitions {
+        match transition.0 {
+            grammar::Symbol::Terminal(_) => {
+                //shift/reduce
+                //TODO: this
+            }
+            grammar::Symbol::Nonterminal(_) => {
+                //goto
+                match cells.insert(transition.0, parse_table::TableCell::Goto(transition.1)) {
+                    None => (),
+                    //goto/goto conflict
+                    Some(x) => {
+                        return Err(parse_table::TableErr::Conflict(
+                            parse_table::TableCell::Goto(transition.1),
+                            x,
+                        ))
+                    }
+                }
+            }
+            grammar::Symbol::EOF() => (), //make some kind of accept
+            _ => panic!("empty transition in generating lr(1) table"),
+        }
+    }
+
+    Result::Ok(parse_table::TableRow { cells: cells })
+}
+
+fn generate_dfa<'a>(cfg: &'a grammar::CFG, firsts: &'a Vec<HashSet<grammar::Symbol>>) -> DFA<'a> {
+    //set up start state
     let mut start_set = ItemSet {
         set: HashSet::new(),
-        cfg: &cfg,
     };
+    //will always be S' -> S <eof>, <eof>
     let start_item = Item {
         reading: 0,
         production: &cfg.productions[0][0],
         lookahead: grammar::Symbol::EOF(),
     };
     start_set.set.insert(start_item);
-    start_set = closure(start_set, &firsts);
-    //other stuff
-    for item in start_set.set {
-        cfg.print_production(item.production);
-        print!(" , {}\n", cfg.symbol_str(&item.lookahead));
+    start_set = closure(start_set, cfg, &firsts);
+    let mut start_state = DFAState {
+        id: 0,
+        itemset: start_set,
+        transitions: Vec::new(),
+    };
+
+    //set up dfa
+    let mut dfa = DFA { states: Vec::new() };
+    dfa.states.push(start_state);
+    //expand dfa
+    let mut added = true;
+    while added {
+        added = false;
+        let mut to_add: Vec<ItemSet<'a>>;
+        for state in &dfa.states {
+            //todo
+            //to_add.append(get_dfa_tranitions(&state.itemset, cfg, firsts))
+        }
     }
+    dfa
 }
 
-fn closure<'a: 'b, 'b: 'c, 'c>(
-    mut itemset: ItemSet<'b, 'c>,
+fn itemsets_equal(a: &ItemSet, b: &ItemSet) -> bool {
+    if a.set.len() != b.set.len() {
+        return false;
+    }
+    for a_item in &a.set {
+        if !b.set.contains(a_item) {
+            return false;
+        }
+    }
+    true
+}
+
+fn get_dfa_tranitions<'a>(
+    itemset: &'a ItemSet,
+    cfg: &'a grammar::CFG,
     firsts: &'a Vec<HashSet<grammar::Symbol>>,
-) -> ItemSet<'b, 'c> {
+) -> Vec<ItemSet<'a>> {
+    let mut map: HashMap<grammar::Symbol, ItemSet<'a>> = HashMap::new();
+    for item in &itemset.set {
+        match map.get_mut(&item.lookahead) {
+            Some(itemset) => {
+                itemset.set.insert(*item);
+            }
+            None => {
+                let mut set = HashSet::new();
+                set.insert(*item);
+                map.insert(item.lookahead, ItemSet { set: set });
+            }
+        };
+    }
+    let mut res = Vec::new();
+    for new_set in map.into_iter() {
+        res.push(closure(new_set.1, cfg, firsts));
+    }
+    res
+}
+//populates an itemset with the closure of its items
+fn closure<'a: 'b, 'b>(
+    mut itemset: ItemSet<'b>,
+    cfg: &'b grammar::CFG,
+    firsts: &'a Vec<HashSet<grammar::Symbol>>,
+) -> ItemSet<'b> {
     let mut add_buf;
     let mut keep_going = true;
     while keep_going {
         keep_going = false;
         add_buf = HashSet::new(); //may want to change this later
         for item in &itemset.set {
-            closure_item(itemset.cfg, firsts, &item, &mut add_buf);
+            closure_item(cfg, firsts, &item, &mut add_buf);
         }
         for add in add_buf.into_iter() {
             if itemset.set.insert(add) {
@@ -83,7 +204,7 @@ fn closure_item<'a: 'b, 'b: 'c, 'c>(
             for prod in prods {
                 dest.insert(Item {
                     reading: item.reading,
-                    lookahead: x,
+                    lookahead: x.clone(),
                     production: prod,
                 });
             }
@@ -93,7 +214,7 @@ fn closure_item<'a: 'b, 'b: 'c, 'c>(
                 for prod in prods {
                     dest.insert(Item {
                         reading: item.reading,
-                        lookahead: *lookahead,
+                        lookahead: lookahead.clone(),
                         production: prod,
                     });
                 }

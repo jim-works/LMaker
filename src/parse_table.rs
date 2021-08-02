@@ -1,13 +1,22 @@
+use super::grammar::*;
+use std::collections::HashMap;
+
 pub enum TableCell {
-    Shift(i32),
-    Reduce(i32),
-    Goto(i32),
+    Shift(usize),
+    Reduce(usize),
+    Goto(usize),
+    Accept(),
+}
+
+pub enum TableErr {
+    Conflict(TableCell, TableCell),
 }
 
 pub struct TableRow {
-    pub cells: Vec<TableCell>,
+    pub cells: HashMap<Symbol, TableCell>,
 }
 
-pub struct Table {
+pub struct Table<'a> {
     pub rows: Vec<TableRow>,
+    pub cfg: &'a CFG<'a>,
 }

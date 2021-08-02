@@ -37,5 +37,8 @@ fn main() {
         println!();
     }
 
-    lr1_generator::generate(&cfg);
+    match lr1_generator::generate(&cfg) {
+        Ok(_) => println!("GOOD!"),
+        Err(_) => println!("BAD!"),
+    }
 }
