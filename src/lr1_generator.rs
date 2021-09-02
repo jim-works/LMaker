@@ -20,7 +20,7 @@ struct ItemSet<'a> {
 struct DFAState<'a> {
     id: usize,
     itemset: ItemSet<'a>,
-    transitions: Vec<(grammar::Symbol, usize)>,
+    transitions: HashMap<grammar::Symbol, usize>,
 }
 
 struct DFA<'a> {
@@ -66,12 +66,12 @@ fn generate_table_row(state: &DFAState) -> Result<parse_table::TableRow, parse_t
             }
             grammar::Symbol::Nonterminal(_) => {
                 //goto
-                match cells.insert(transition.0, parse_table::TableCell::Goto(transition.1)) {
+                match cells.insert(*transition.0, parse_table::TableCell::Goto(*transition.1)) {
                     None => (),
                     //goto/goto conflict
                     Some(x) => {
                         return Err(parse_table::TableErr::Conflict(
-                            parse_table::TableCell::Goto(transition.1),
+                            parse_table::TableCell::Goto(*transition.1),
                             x,
                         ))
                     }
@@ -85,7 +85,10 @@ fn generate_table_row(state: &DFAState) -> Result<parse_table::TableRow, parse_t
     Result::Ok(parse_table::TableRow { cells: cells })
 }
 
-fn generate_dfa<'a>(cfg: &'a grammar::CFG, firsts: &'a Vec<HashSet<grammar::Symbol>>) -> DFA<'a> {
+fn generate_dfa<'a: 'b, 'b>(
+    cfg: &'a grammar::CFG,
+    firsts: &'a Vec<HashSet<grammar::Symbol>>,
+) -> DFA<'a> {
     //set up start state
     let mut start_set = ItemSet {
         set: HashSet::new(),
@@ -101,7 +104,7 @@ fn generate_dfa<'a>(cfg: &'a grammar::CFG, firsts: &'a Vec<HashSet<grammar::Symb
     let mut start_state = DFAState {
         id: 0,
         itemset: start_set,
-        transitions: Vec::new(),
+        transitions: HashMap::new(),
     };
 
     //set up dfa
@@ -109,13 +112,49 @@ fn generate_dfa<'a>(cfg: &'a grammar::CFG, firsts: &'a Vec<HashSet<grammar::Symb
     dfa.states.push(start_state);
     //expand dfa
     let mut added = true;
+    //should change data structure but idc at the moment. just want it to woooork
     while added {
+        //buffers
+        let mut to_add = Vec::new();
+        let mut transitions = Vec::new();
         added = false;
-        let mut to_add: Vec<ItemSet<'a>>;
-        for state in &dfa.states {
-            //todo
-            //to_add.append(get_dfa_tranitions(&state.itemset, cfg, firsts))
+        for i in 0..dfa.states.len() {
+            let state = &dfa.states[i];
+            //get all itemsets needed for this state
+            let adj_states = get_dfa_tranitions(state, cfg, firsts);
+            //find or create id for each itemset
+            let mut flag = false;
+            for adj in adj_states {
+                for j in 0..dfa.states.len() {
+                    if adj.1.set == dfa.states[j].itemset.set {
+                        transitions.push((i, adj.0, j)); //found id
+                        flag = true;
+                        break;
+                    }
+                }
+                if !flag {
+                    //not found
+                    //to_add.push(adj.1);
+                    let new_id = dfa.states.len() + transitions.len();
+                    to_add.push(DFAState {
+                        id: new_id,
+                        itemset: adj.1,
+                        transitions: HashMap::new(),
+                    });
+                    transitions.push((i, adj.0, dfa.states.len() + transitions.len()));
+                    added = true;
+                }
+            }
         }
+        //populate the real objects from the buffers
+        /*for new_state in to_add {
+            dfa.states.push(new_state);
+        }
+        for transition in transitions {
+            dfa.states[transition.0]
+                .transitions
+                .insert(transition.1, transition.2);
+        }*/
     }
     dfa
 }
@@ -132,13 +171,13 @@ fn itemsets_equal(a: &ItemSet, b: &ItemSet) -> bool {
     true
 }
 
-fn get_dfa_tranitions<'a>(
-    itemset: &'a ItemSet,
+fn get_dfa_tranitions<'a: 'b, 'b>(
+    state: &'b DFAState<'b>,
     cfg: &'a grammar::CFG,
     firsts: &'a Vec<HashSet<grammar::Symbol>>,
-) -> Vec<ItemSet<'a>> {
-    let mut map: HashMap<grammar::Symbol, ItemSet<'a>> = HashMap::new();
-    for item in &itemset.set {
+) -> HashMap<grammar::Symbol, ItemSet<'b>> {
+    let mut map: HashMap<grammar::Symbol, ItemSet> = HashMap::new();
+    for item in &state.itemset.set {
         match map.get_mut(&item.lookahead) {
             Some(itemset) => {
                 itemset.set.insert(*item);
@@ -150,10 +189,11 @@ fn get_dfa_tranitions<'a>(
             }
         };
     }
-    let mut res = Vec::new();
-    for new_set in map.into_iter() {
-        res.push(closure(new_set.1, cfg, firsts));
+    let mut res: HashMap<grammar::Symbol, ItemSet> = HashMap::new();
+    for item in map {
+        res.insert(item.0, closure(item.1, cfg, firsts));
     }
+
     res
 }
 //populates an itemset with the closure of its items
