@@ -1,7 +1,8 @@
-mod grammar;
-mod lr1_generator;
-mod parse_table;
+mod codegen;
+mod parsing;
 mod test;
+
+use parsing::*;
 
 //TODO: FIX EMPTIES
 

@@ -150,11 +150,11 @@ fn generate_dfa<'a: 'b, 'b>(
         /*for new_state in to_add {
             dfa.states.push(new_state);
         }
-        for transition in transitions {
-            dfa.states[transition.0]
-                .transitions
-                .insert(transition.1, transition.2);
-        }*/
+          for transition in transitions {
+              dfa.states[transition.0]
+                  .transitions
+                  .insert(transition.1, transition.2);
+          }*/
     }
     dfa
 }
